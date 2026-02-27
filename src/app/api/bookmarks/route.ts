@@ -1,101 +1,72 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { createBookmarkSchema } from '@/lib/validators';
-import { ZodError } from 'zod';
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { z } from "zod";
 
-/**
- * GET /api/bookmarks
- * Query params:
- *   - tag: string  — filter bookmarks where tags array contains this tag (exact match)
- *   - q:   string  — case-insensitive substring search on title
- *
- * Returns bookmarks sorted by created_at DESC.
- */
+const CreateBookmarkSchema = z.object({
+  url: z.string().url({ message: "Must be a valid URL" }),
+  title: z.string().min(1, "Title is required").max(255),
+  tags: z.array(z.string().min(1).max(50)).max(20).optional().default([]),
+});
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const tag = searchParams.get('tag');
-    const q = searchParams.get('q');
+    const search = searchParams.get("search") ?? "";
+    const tag = searchParams.get("tag") ?? "";
 
     let query = supabaseAdmin
-      .from('bookmarks')
-      .select('id, url, title, tags, created_at')
-      .order('created_at', { ascending: false });
+      .from("bookmarks")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    if (tag && tag.trim() !== '') {
-      // GIN index: check if tags array contains the given tag
-      query = query.contains('tags', [tag.trim()]);
+    if (search) {
+      query = query.ilike("title", `%${search}%`);
     }
 
-    if (q && q.trim() !== '') {
-      // B-tree / sequential scan: case-insensitive title search
-      query = query.ilike('title', `%${q.trim()}%`);
+    if (tag) {
+      query = query.contains("tags", [tag]);
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error('[GET /api/bookmarks] Supabase error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch bookmarks', details: error.message },
-        { status: 500 }
-      );
+      console.error("Supabase GET error:", error);
+      return NextResponse.json({ error: "Failed to fetch bookmarks" }, { status: 500 });
     }
 
-    return NextResponse.json(data, { status: 200 });
+    return NextResponse.json({ bookmarks: data });
   } catch (err) {
-    console.error('[GET /api/bookmarks] Unexpected error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Unexpected error in GET /api/bookmarks:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-/**
- * POST /api/bookmarks
- * Body: { url: string; title: string; tags?: string[] }
- * Returns the created bookmark.
- */
 export async function POST(request: NextRequest) {
   try {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-    }
+    const body = await request.json();
+    const parsed = CreateBookmarkSchema.safeParse(body);
 
-    const parsed = createBookmarkSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
+        { error: "Validation failed", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
 
-    const { url, title, tags } = parsed.data;
-
     const { data, error } = await supabaseAdmin
-      .from('bookmarks')
-      .insert({ url, title, tags })
-      .select('id, url, title, tags, created_at')
+      .from("bookmarks")
+      .insert(parsed.data)
+      .select()
       .single();
 
     if (error) {
-      console.error('[POST /api/bookmarks] Supabase error:', error);
-      return NextResponse.json(
-        { error: 'Failed to create bookmark', details: error.message },
-        { status: 500 }
-      );
+      console.error("Supabase POST error:", error);
+      return NextResponse.json({ error: "Failed to create bookmark" }, { status: 500 });
     }
 
-    return NextResponse.json(data, { status: 201 });
+    return NextResponse.json({ bookmark: data }, { status: 201 });
   } catch (err) {
-    if (err instanceof ZodError) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: err.flatten().fieldErrors },
-        { status: 400 }
-      );
-    }
-    console.error('[POST /api/bookmarks] Unexpected error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Unexpected error in POST /api/bookmarks:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

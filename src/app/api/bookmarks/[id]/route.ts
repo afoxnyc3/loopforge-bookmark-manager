@@ -1,113 +1,85 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { updateBookmarkSchema } from '@/lib/validators';
-import { ZodError } from 'zod';
+import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { z } from "zod";
 
-interface RouteContext {
+const UpdateBookmarkSchema = z.object({
+  url: z.string().url({ message: "Must be a valid URL" }).optional(),
+  title: z.string().min(1).max(255).optional(),
+  tags: z.array(z.string().min(1).max(50)).max(20).optional(),
+});
+
+interface RouteParams {
   params: { id: string };
 }
 
-/**
- * PATCH /api/bookmarks/:id
- * Body: partial { url?: string; title?: string; tags?: string[] }
- * Returns the updated bookmark.
- */
-export async function PATCH(request: NextRequest, { params }: RouteContext) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-
-    if (!id || typeof id !== 'string') {
-      return NextResponse.json({ error: 'Missing or invalid bookmark id' }, { status: 400 });
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-    }
-
-    const parsed = updateBookmarkSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten().fieldErrors },
-        { status: 400 }
-      );
-    }
-
-    const updates = parsed.data;
-
     const { data, error } = await supabaseAdmin
-      .from('bookmarks')
-      .update(updates)
-      .eq('id', id)
-      .select('id, url, title, tags, created_at')
+      .from("bookmarks")
+      .select("*")
+      .eq("id", params.id)
       .single();
 
-    if (error) {
-      // PostgREST returns PGRST116 when no rows matched
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Bookmark not found' }, { status: 404 });
-      }
-      console.error(`[PATCH /api/bookmarks/${id}] Supabase error:`, error);
-      return NextResponse.json(
-        { error: 'Failed to update bookmark', details: error.message },
-        { status: 500 }
-      );
+    if (error || !data) {
+      return NextResponse.json({ error: "Bookmark not found" }, { status: 404 });
     }
 
-    return NextResponse.json(data, { status: 200 });
+    return NextResponse.json({ bookmark: data });
   } catch (err) {
-    if (err instanceof ZodError) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: err.flatten().fieldErrors },
-        { status: 400 }
-      );
-    }
-    console.error('[PATCH /api/bookmarks/:id] Unexpected error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Unexpected error in GET /api/bookmarks/[id]:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/bookmarks/:id
- * Returns 204 No Content on success.
- */
-export async function DELETE(_request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const body = await request.json();
+    const parsed = UpdateBookmarkSchema.safeParse(body);
 
-    if (!id || typeof id !== 'string') {
-      return NextResponse.json({ error: 'Missing or invalid bookmark id' }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
     }
 
-    // First verify the record exists
-    const { data: existing, error: fetchError } = await supabaseAdmin
-      .from('bookmarks')
-      .select('id')
-      .eq('id', id)
+    if (Object.keys(parsed.data).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("bookmarks")
+      .update(parsed.data)
+      .eq("id", params.id)
+      .select()
       .single();
 
-    if (fetchError || !existing) {
-      return NextResponse.json({ error: 'Bookmark not found' }, { status: 404 });
+    if (error || !data) {
+      return NextResponse.json({ error: "Bookmark not found or update failed" }, { status: 404 });
     }
 
+    return NextResponse.json({ bookmark: data });
+  } catch (err) {
+    console.error("Unexpected error in PATCH /api/bookmarks/[id]:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+  try {
     const { error } = await supabaseAdmin
-      .from('bookmarks')
+      .from("bookmarks")
       .delete()
-      .eq('id', id);
+      .eq("id", params.id);
 
     if (error) {
-      console.error(`[DELETE /api/bookmarks/${id}] Supabase error:`, error);
-      return NextResponse.json(
-        { error: 'Failed to delete bookmark', details: error.message },
-        { status: 500 }
-      );
+      console.error("Supabase DELETE error:", error);
+      return NextResponse.json({ error: "Failed to delete bookmark" }, { status: 500 });
     }
 
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    console.error('[DELETE /api/bookmarks/:id] Unexpected error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error("Unexpected error in DELETE /api/bookmarks/[id]:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
