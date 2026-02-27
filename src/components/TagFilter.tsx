@@ -1,4 +1,4 @@
-'use client';
+import React from 'react';
 
 interface TagFilterProps {
   tags: string[];
@@ -6,18 +6,17 @@ interface TagFilterProps {
   onSelectTag: (tag: string | null) => void;
 }
 
-export function TagFilter({ tags, selectedTag, onSelectTag }: TagFilterProps) {
+export default function TagFilter({ tags, selectedTag, onSelectTag }: TagFilterProps) {
+  if (tags.length === 0) return null;
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide mr-1">
-        Filter:
-      </span>
+    <div className="flex flex-wrap gap-2">
       <button
         onClick={() => onSelectTag(null)}
-        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
           selectedTag === null
             ? 'bg-blue-600 text-white'
-            : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
         }`}
       >
         All
@@ -26,13 +25,13 @@ export function TagFilter({ tags, selectedTag, onSelectTag }: TagFilterProps) {
         <button
           key={tag}
           onClick={() => onSelectTag(selectedTag === tag ? null : tag)}
-          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
             selectedTag === tag
               ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          #{tag}
+          {tag}
         </button>
       ))}
     </div>

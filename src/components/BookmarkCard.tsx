@@ -1,11 +1,9 @@
-'use client';
-
-import type { Bookmark } from '@/types/bookmark';
+import React, { useState } from 'react';
+import { Bookmark } from '@/types/bookmark';
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
-  onEdit: (bookmark: Bookmark) => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 function getDomain(url: string): string {
@@ -16,105 +14,98 @@ function getDomain(url: string): string {
   }
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+export default function BookmarkCard({ bookmark, onDelete }: BookmarkCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-export function BookmarkCard({ bookmark, onEdit, onDelete }: BookmarkCardProps) {
-  const domain = getDomain(bookmark.url);
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDelete?.(bookmark.id);
+    setConfirmDelete(false);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmDelete(false);
+  };
 
   return (
-    <article className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col overflow-hidden group">
-      {/* Card header */}
-      <div className="p-4 flex-1">
-        <div className="flex items-start gap-3 mb-3">
-          {/* Favicon */}
-          <div className="w-8 h-8 rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={faviconUrl}
-              alt=""
-              width={16}
-              height={16}
-              className="w-4 h-4"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </div>
-
-          {/* Title + domain */}
-          <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 mb-0.5">
-              {bookmark.title}
-            </h2>
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:text-blue-800 hover:underline truncate block"
-            >
-              {domain}
-            </a>
-          </div>
+    <a
+      href={bookmark.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-blue-200 transition-all duration-200 p-4 group relative"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+            {bookmark.title}
+          </h3>
+          <p className="text-sm text-gray-400 truncate mt-0.5">{getDomain(bookmark.url)}</p>
         </div>
-
-        {/* Tags */}
-        {bookmark.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {bookmark.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
+        {onDelete && (
+          <button
+            onClick={handleDeleteClick}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded"
+            aria-label="Delete bookmark"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         )}
       </div>
 
-      {/* Card footer */}
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-        <span className="text-xs text-gray-400">{formatDate(bookmark.created_at)}</span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(bookmark)}
-            className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-            aria-label="Edit bookmark"
-            title="Edit"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={() => onDelete(bookmark.id)}
-            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-            aria-label="Delete bookmark"
-            title="Delete"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
+      {bookmark.tags && bookmark.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {bookmark.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600"
+            >
+              {tag}
+            </span>
+          ))}
         </div>
-      </div>
-    </article>
+      )}
+
+      <p className="text-xs text-gray-300 mt-3">
+        {new Date(bookmark.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })}
+      </p>
+
+      {confirmDelete && (
+        <div
+          className="absolute inset-0 bg-white/95 rounded-xl flex flex-col items-center justify-center gap-3 p-4"
+          onClick={(e) => e.preventDefault()}
+        >
+          <p className="text-sm font-medium text-gray-700">Delete this bookmark?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleConfirmDelete}
+              className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors"
+            >
+              Delete
+            </button>
+            <button
+              onClick={handleCancelDelete}
+              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </a>
   );
 }

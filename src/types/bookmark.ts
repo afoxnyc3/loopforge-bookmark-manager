@@ -6,14 +6,5 @@ export interface Bookmark {
   created_at: string;
 }
 
-export interface CreateBookmarkInput {
-  url: string;
-  title: string;
-  tags?: string[];
-}
-
-export interface UpdateBookmarkInput {
-  url?: string;
-  title?: string;
-  tags?: string[];
-}
+export type CreateBookmarkInput = Omit<Bookmark, 'id' | 'created_at'>;
+export type UpdateBookmarkInput = Partial<CreateBookmarkInput>;

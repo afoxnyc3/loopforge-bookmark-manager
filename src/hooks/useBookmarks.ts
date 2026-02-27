@@ -1,96 +1,90 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import { Bookmark, CreateBookmarkInput, UpdateBookmarkInput } from "@/types/bookmark";
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Bookmark } from '@/types/bookmark';
 
-interface UseBookmarksOptions {
-  search?: string;
-  tag?: string;
-}
+const API_BASE = '/api/bookmarks';
 
-interface UseBookmarksReturn {
-  bookmarks: Bookmark[];
-  isLoading: boolean;
-  error: string | null;
-  createBookmark: (input: CreateBookmarkInput) => Promise<void>;
-  updateBookmark: (id: string, input: UpdateBookmarkInput) => Promise<void>;
-  deleteBookmark: (id: string) => Promise<void>;
-  refetch: () => void;
-}
-
-export function useBookmarks({ search = "", tag = "" }: UseBookmarksOptions = {}): UseBookmarksReturn {
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+export function useBookmarks() {
+  const [allBookmarks, setAllBookmarks] = useState<Bookmark[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const fetchBookmarks = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      if (tag) params.set("tag", tag);
-      const res = await fetch(`/api/bookmarks?${params.toString()}`);
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to fetch bookmarks");
-      }
+      const res = await fetch(API_BASE);
+      if (!res.ok) throw new Error(`Failed to fetch bookmarks: ${res.status}`);
       const data = await res.json();
-      setBookmarks(data.bookmarks ?? data);
+      setAllBookmarks(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(err instanceof Error ? err.message : 'Failed to load bookmarks');
     } finally {
       setIsLoading(false);
     }
-  }, [search, tag]);
+  }, []);
 
   useEffect(() => {
     fetchBookmarks();
   }, [fetchBookmarks]);
 
-  const createBookmark = useCallback(async (input: CreateBookmarkInput) => {
-    const res = await fetch("/api/bookmarks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "Failed to create bookmark");
+  const bookmarks = useMemo(() => {
+    let filtered = allBookmarks;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter((b) => b.title.toLowerCase().includes(q));
     }
-    await fetchBookmarks();
-  }, [fetchBookmarks]);
+    if (selectedTag) {
+      filtered = filtered.filter((b) => b.tags?.includes(selectedTag));
+    }
+    return filtered;
+  }, [allBookmarks, searchQuery, selectedTag]);
 
-  const updateBookmark = useCallback(async (id: string, input: UpdateBookmarkInput) => {
-    const res = await fetch(`/api/bookmarks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "Failed to update bookmark");
-    }
-    await fetchBookmarks();
-  }, [fetchBookmarks]);
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    allBookmarks.forEach((b) => b.tags?.forEach((t) => tagSet.add(t)));
+    return Array.from(tagSet).sort();
+  }, [allBookmarks]);
+
+  const addBookmark = useCallback(
+    async (data: { url: string; title: string; tags: string[] }) => {
+      const res = await fetch(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add bookmark');
+      }
+      const newBookmark: Bookmark = await res.json();
+      setAllBookmarks((prev) => [newBookmark, ...prev]);
+    },
+    []
+  );
 
   const deleteBookmark = useCallback(async (id: string) => {
-    const res = await fetch(`/api/bookmarks/${id}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error ?? "Failed to delete bookmark");
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to delete bookmark');
     }
-    await fetchBookmarks();
-  }, [fetchBookmarks]);
+    setAllBookmarks((prev) => prev.filter((b) => b.id !== id));
+  }, []);
 
   return {
     bookmarks,
     isLoading,
     error,
-    createBookmark,
-    updateBookmark,
+    searchQuery,
+    setSearchQuery,
+    selectedTag,
+    setSelectedTag,
+    allTags,
+    addBookmark,
     deleteBookmark,
     refetch: fetchBookmarks,
   };

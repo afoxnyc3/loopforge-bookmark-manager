@@ -1,75 +1,49 @@
-'use client';
-
-import { useEffect, useRef, useState } from 'react';
-import type { Bookmark } from '@/types/bookmark';
+import React, { useState, useEffect } from 'react';
 
 interface AddBookmarkModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (payload: { url: string; title: string; tags: string[] }) => Promise<void>;
-  initialValues?: Partial<Bookmark>;
-  title?: string;
+  onAdd: (data: { url: string; title: string; tags: string[] }) => Promise<void>;
 }
 
-export function AddBookmarkModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialValues,
-  title = 'Add Bookmark',
-}: AddBookmarkModalProps) {
-  const [url, setUrl] = useState(initialValues?.url ?? '');
-  const [bookmarkTitle, setBookmarkTitle] = useState(initialValues?.title ?? '');
-  const [tagsInput, setTagsInput] = useState(
-    initialValues?.tags?.join(', ') ?? ''
-  );
+export default function AddBookmarkModal({ isOpen, onClose, onAdd }: AddBookmarkModalProps) {
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const urlInputRef = useRef<HTMLInputElement>(null);
+  const [errors, setErrors] = useState<{ url?: string; title?: string }>({});
 
-  // Sync form when initialValues change (edit mode)
   useEffect(() => {
-    if (isOpen) {
-      setUrl(initialValues?.url ?? '');
-      setBookmarkTitle(initialValues?.title ?? '');
-      setTagsInput(initialValues?.tags?.join(', ') ?? '');
-      setValidationError(null);
-      setTimeout(() => urlInputRef.current?.focus(), 50);
+    if (!isOpen) {
+      setUrl('');
+      setTitle('');
+      setTagsInput('');
+      setErrors({});
+      setIsSubmitting(false);
     }
-  }, [isOpen, initialValues]);
+  }, [isOpen]);
 
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  const validate = () => {
+    const newErrors: { url?: string; title?: string } = {};
+    if (!url.trim()) {
+      newErrors.url = 'URL is required';
+    } else {
+      try {
+        new URL(url.trim());
+      } catch {
+        newErrors.url = 'Please enter a valid URL';
+      }
+    }
+    if (!title.trim()) {
+      newErrors.title = 'Title is required';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setValidationError(null);
-
-    const trimmedUrl = url.trim();
-    const trimmedTitle = bookmarkTitle.trim();
-
-    if (!trimmedUrl) {
-      setValidationError('URL is required.');
-      return;
-    }
-    try {
-      new URL(trimmedUrl);
-    } catch {
-      setValidationError('Please enter a valid URL (e.g. https://example.com).');
-      return;
-    }
-    if (!trimmedTitle) {
-      setValidationError('Title is required.');
-      return;
-    }
+    if (!validate()) return;
 
     const tags = tagsInput
       .split(',')
@@ -78,159 +52,96 @@ export function AddBookmarkModal({
 
     setIsSubmitting(true);
     try {
-      await onSubmit({ url: trimmedUrl, title: trimmedTitle, tags });
+      await onAdd({ url: url.trim(), title: title.trim(), tags });
+      onClose();
+    } catch (err) {
+      console.error('Failed to add bookmark:', err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal panel */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 id="modal-title" className="text-base font-semibold text-gray-900">
-            {title}
-          </h2>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-gray-900">Add Bookmark</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            aria-label="Close modal"
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label="Close"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="px-6 py-5 space-y-4">
-            {validationError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {validationError}
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="bookmark-url"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                URL <span className="text-red-500">*</span>
-              </label>
-              <input
-                ref={urlInputRef}
-                id="bookmark-url"
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="input-field"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="bookmark-title"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Title <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="bookmark-title"
-                type="text"
-                value={bookmarkTitle}
-                onChange={(e) => setBookmarkTitle(e.target.value)}
-                placeholder="My Awesome Resource"
-                className="input-field"
-                required
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="bookmark-tags"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Tags
-                <span className="ml-1 text-xs font-normal text-gray-400">
-                  (comma-separated)
-                </span>
-              </label>
-              <input
-                id="bookmark-tags"
-                type="text"
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="react, typescript, tools"
-                className="input-field"
-                disabled={isSubmitting}
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              URL <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com"
+              className={`block w-full px-3 py-2.5 border rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                errors.url ? 'border-red-300 bg-red-50' : 'border-gray-200'
+              }`}
+            />
+            {errors.url && <p className="mt-1 text-xs text-red-500">{errors.url}</p>}
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 bg-gray-50 rounded-b-2xl border-t border-gray-100 flex justify-end gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="My bookmark title"
+              className={`block w-full px-3 py-2.5 border rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                errors.title ? 'border-red-300 bg-red-50' : 'border-gray-200'
+              }`}
+            />
+            {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+            <input
+              type="text"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="react, tools, design (comma-separated)"
+              className="block w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+            <p className="mt-1 text-xs text-gray-400">Separate tags with commas</p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="btn-secondary"
-              disabled={isSubmitting}
+              className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="btn-primary"
               disabled={isSubmitting}
+              className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isSubmitting ? (
-                <>
-                  <svg
-                    className="w-4 h-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 12 0 12 12h4z"
-                    />
-                  </svg>
-                  Saving…
-                </>
-              ) : (
-                title
-              )}
+              {isSubmitting ? 'Adding...' : 'Add Bookmark'}
             </button>
           </div>
         </form>
