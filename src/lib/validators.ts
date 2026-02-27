@@ -1,43 +1,52 @@
 import { z } from 'zod';
 
-/**
- * Schema for creating a new bookmark (POST /api/bookmarks)
- */
 export const createBookmarkSchema = z.object({
   url: z
-    .string({ required_error: 'url is required' })
-    .url({ message: 'url must be a valid URL' }),
+    .string()
+    .url({ message: 'Must be a valid URL (e.g. https://example.com)' })
+    .max(2048, { message: 'URL must be 2048 characters or fewer' }),
   title: z
-    .string({ required_error: 'title is required' })
-    .min(1, { message: 'title must not be empty' })
-    .max(255, { message: 'title must be 255 characters or fewer' }),
+    .string()
+    .min(1, { message: 'Title is required' })
+    .max(255, { message: 'Title must be 255 characters or fewer' }),
   tags: z
-    .array(z.string().min(1).max(50))
-    .max(20, { message: 'A bookmark may have at most 20 tags' })
+    .array(
+      z
+        .string()
+        .min(1, { message: 'Tag must not be empty' })
+        .max(50, { message: 'Each tag must be 50 characters or fewer' })
+        .regex(/^[a-zA-Z0-9_-]+$/, { message: 'Tags may only contain letters, numbers, hyphens, and underscores' })
+    )
+    .max(10, { message: 'A bookmark may have at most 10 tags' })
+    .optional()
     .default([]),
 });
 
+export const updateBookmarkSchema = z.object({
+  url: z
+    .string()
+    .url({ message: 'Must be a valid URL' })
+    .max(2048)
+    .optional(),
+  title: z
+    .string()
+    .min(1, { message: 'Title is required' })
+    .max(255)
+    .optional(),
+  tags: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(50)
+        .regex(/^[a-zA-Z0-9_-]+$/)
+    )
+    .max(10)
+    .optional(),
+}).refine(
+  (data) => Object.keys(data).length > 0,
+  { message: 'At least one field (url, title, or tags) must be provided for update' }
+);
+
 export type CreateBookmarkInput = z.infer<typeof createBookmarkSchema>;
-
-/**
- * Schema for updating an existing bookmark (PATCH /api/bookmarks/:id)
- * All fields are optional — only provided fields are updated.
- */
-export const updateBookmarkSchema = z
-  .object({
-    url: z.string().url({ message: 'url must be a valid URL' }).optional(),
-    title: z
-      .string()
-      .min(1, { message: 'title must not be empty' })
-      .max(255, { message: 'title must be 255 characters or fewer' })
-      .optional(),
-    tags: z
-      .array(z.string().min(1).max(50))
-      .max(20, { message: 'A bookmark may have at most 20 tags' })
-      .optional(),
-  })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: 'At least one field must be provided for update',
-  });
-
 export type UpdateBookmarkInput = z.infer<typeof updateBookmarkSchema>;
