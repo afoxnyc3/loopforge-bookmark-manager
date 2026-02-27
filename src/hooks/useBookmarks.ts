@@ -1,98 +1,98 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  createBookmark,
-  deleteBookmark,
-  fetchBookmarks,
-  updateBookmark,
-} from '@/lib/api';
-import type {
-  Bookmark,
-  BookmarkFilters,
-  CreateBookmarkPayload,
-  UpdateBookmarkPayload,
-} from '@/types/bookmark';
+import { useState, useEffect, useCallback } from 'react';
+import { Bookmark, CreateBookmarkInput } from '@/types/bookmark';
+
+interface UseBookmarksOptions {
+  search?: string;
+  tag?: string;
+}
 
 interface UseBookmarksReturn {
   bookmarks: Bookmark[];
   allTags: string[];
-  isLoading: boolean;
+  loading: boolean;
   error: string | null;
-  filters: BookmarkFilters;
-  setFilters: (filters: BookmarkFilters) => void;
-  addBookmark: (payload: CreateBookmarkPayload) => Promise<void>;
-  editBookmark: (id: string, payload: UpdateBookmarkPayload) => Promise<void>;
-  removeBookmark: (id: string) => Promise<void>;
+  addBookmark: (data: CreateBookmarkInput) => Promise<void>;
+  deleteBookmark: (id: string) => Promise<void>;
   refresh: () => void;
 }
 
-export function useBookmarks(): UseBookmarksReturn {
+export function useBookmarks({ search = '', tag }: UseBookmarksOptions = {}): UseBookmarksReturn {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<BookmarkFilters>({});
-  const refreshCountRef = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const load = useCallback(async (currentFilters: BookmarkFilters) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await fetchBookmarks(currentFilters);
-      setBookmarks(result.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load bookmarks');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    load(filters);
-  }, [filters, load, refreshCountRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+    let cancelled = false;
 
-  const refresh = useCallback(() => {
-    refreshCountRef.current += 1;
-    load(filters);
-  }, [filters, load]);
+    async function fetchBookmarks() {
+      setLoading(true);
+      setError(null);
 
-  const addBookmark = useCallback(
-    async (payload: CreateBookmarkPayload) => {
-      const newBookmark = await createBookmark(payload);
-      setBookmarks((prev) => [newBookmark, ...prev]);
-    },
-    []
-  );
+      try {
+        const params = new URLSearchParams();
+        if (search) params.set('search', search);
+        if (tag) params.set('tag', tag);
 
-  const editBookmark = useCallback(
-    async (id: string, payload: UpdateBookmarkPayload) => {
-      const updated = await updateBookmark(id, payload);
-      setBookmarks((prev) =>
-        prev.map((b) => (b.id === id ? updated : b))
-      );
-    },
-    []
-  );
+        const res = await fetch(`/api/bookmarks?${params.toString()}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? `Request failed: ${res.status}`);
+        }
 
-  const removeBookmark = useCallback(async (id: string) => {
-    await deleteBookmark(id);
-    setBookmarks((prev) => prev.filter((b) => b.id !== id));
-  }, []);
+        const data: Bookmark[] = await res.json();
 
-  const allTags = Array.from(
-    new Set(bookmarks.flatMap((b) => b.tags))
-  ).sort();
+        if (!cancelled) {
+          setBookmarks(data);
 
-  return {
-    bookmarks,
-    allTags,
-    isLoading,
-    error,
-    filters,
-    setFilters,
-    addBookmark,
-    editBookmark,
-    removeBookmark,
-    refresh,
-  };
+          // Derive all unique tags from the full dataset for the sidebar
+          const tagSet = new Set<string>();
+          data.forEach((b) => b.tags?.forEach((t) => tagSet.add(t)));
+          setAllTags(Array.from(tagSet).sort());
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load bookmarks.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchBookmarks();
+    return () => { cancelled = true; };
+  }, [search, tag, refreshKey]);
+
+  const addBookmark = useCallback(async (data: CreateBookmarkInput) => {
+    const res = await fetch('/api/bookmarks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error ?? 'Failed to add bookmark.');
+    }
+
+    refresh();
+  }, [refresh]);
+
+  const deleteBookmark = useCallback(async (id: string) => {
+    const res = await fetch(`/api/bookmarks/${id}`, { method: 'DELETE' });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error ?? 'Failed to delete bookmark.');
+    }
+
+    refresh();
+  }, [refresh]);
+
+  return { bookmarks, allTags, loading, error, addBookmark, deleteBookmark, refresh };
 }
